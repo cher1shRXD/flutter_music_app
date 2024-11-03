@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_music_app/components/navigation.dart';
+import 'package:flutter_music_app/components/playbar.dart';
 import 'package:get/get.dart';
 
 void main() {
@@ -12,11 +13,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Flutter Demo',
+      title: 'MUSICO',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue[200]!),
+          useMaterial3: true,
+          scaffoldBackgroundColor: Colors.white),
       home: const MyHomePage(),
     );
   }
@@ -32,6 +33,10 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
-    return const Navigation();
+    return const Scaffold(
+      body: Navigation(),
+      floatingActionButton: Playbar(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
   }
 }
