@@ -35,88 +35,52 @@ class Navigation extends StatelessWidget {
                 selectedIndex: controller.selectedIndex.value,
                 onDestinationSelected: (index) =>
                     controller.selectedIndex.value = index,
-                labelBehavior:
-                    NavigationDestinationLabelBehavior.onlyShowSelected,
-                destinations: [
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                destinations: const [
                   NavigationDestination(
-                    icon: const Icon(Icons.search, size: 24),
-                    selectedIcon: Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                            color: Colors.blue[200],
-                            borderRadius:
-                                const BorderRadius.all(Radius.circular(100))),
-                        child: const Icon(
-                          Icons.search,
-                          size: 28,
-                          color: Colors.white,
-                        )),
-                    label: '',
+                    icon: Icon(Icons.search, size: 24),
+                    selectedIcon: Icon(
+                      Icons.search,
+                      size: 28,
+                      color: Colors.black,
+                    ),
+                    label: '검색',
                   ),
                   NavigationDestination(
-                    icon: const Icon(Icons.queue_music, size: 24),
-                    selectedIcon: Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                            color: Colors.blue[200],
-                            borderRadius:
-                                const BorderRadius.all(Radius.circular(100))),
-                        child: const Icon(
-                          Icons.queue_music,
-                          size: 28,
-                          color: Colors.white,
-                        )),
-                    label: '',
+                    icon: Icon(Icons.queue_music, size: 24),
+                    selectedIcon: Icon(
+                      Icons.queue_music,
+                      size: 28,
+                      color: Colors.black,
+                    ),
+                    label: '재생목록',
                   ),
                   NavigationDestination(
-                    icon: const Icon(Icons.home, size: 24),
-                    selectedIcon: Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                            color: Colors.blue[200],
-                            borderRadius:
-                                const BorderRadius.all(Radius.circular(100))),
-                        child: const Icon(
-                          Icons.home,
-                          size: 28,
-                          color: Colors.white,
-                        )),
-                    label: '',
+                    icon: Icon(Icons.home, size: 24),
+                    selectedIcon: Icon(
+                      Icons.home,
+                      size: 28,
+                      color: Colors.black,
+                    ),
+                    label: '홈',
                   ),
                   NavigationDestination(
-                    icon: const Icon(Icons.my_library_music, size: 24),
-                    selectedIcon: Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                            color: Colors.blue[200],
-                            borderRadius:
-                                const BorderRadius.all(Radius.circular(100))),
-                        child: const Icon(
-                          Icons.my_library_music,
-                          size: 28,
-                          color: Colors.white,
-                        )),
-                    label: '',
+                    icon: Icon(Icons.my_library_music, size: 24),
+                    selectedIcon: Icon(
+                      Icons.my_library_music,
+                      size: 28,
+                      color: Colors.black,
+                    ),
+                    label: '라이브러리',
                   ),
                   NavigationDestination(
-                    icon: const Icon(Icons.person, size: 24),
-                    selectedIcon: Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                            color: Colors.blue[200],
-                            borderRadius:
-                                const BorderRadius.all(Radius.circular(100))),
-                        child: const Icon(
-                          Icons.person,
-                          size: 28,
-                          color: Colors.white,
-                        )),
-                    label: '',
+                    icon: Icon(Icons.person, size: 24),
+                    selectedIcon: Icon(
+                      Icons.person,
+                      size: 28,
+                      color: Colors.black,
+                    ),
+                    label: '프로필',
                   ),
                 ],
               ),
