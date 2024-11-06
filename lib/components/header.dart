@@ -15,7 +15,6 @@ class _HeaderState extends State<Header> {
     return Padding(
       padding: const EdgeInsets.only(left: 12, right: 12, top: 12, bottom: 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Icon(widget.icon),
           Text(

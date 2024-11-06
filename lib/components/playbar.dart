@@ -1,6 +1,78 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:palette_generator/palette_generator.dart';
+import 'package:flutter_music_app/components/play_screen.dart';
+import 'package:flutter_music_app/models/music_model.dart';
+
+mixin AudioPlayerController on State<Playbar> {
+  final AudioPlayer audioPlayer = AudioPlayer();
+  bool isSliderDragging = false;
+  double? dragValue;
+
+  Future<void> initAudioPlayer(String audioUrl) async {
+    try {
+      await audioPlayer.setUrl(audioUrl);
+    } catch (e) {
+      debugPrint('Error initializing audio player: $e');
+    }
+  }
+
+  void togglePlayPause() {
+    if (audioPlayer.playing) {
+      audioPlayer.pause();
+    } else {
+      audioPlayer.play();
+    }
+  }
+
+  @override
+  void dispose() {
+    audioPlayer.stop();
+    audioPlayer.dispose();
+    super.dispose();
+  }
+}
+
+mixin PaletteGeneratorMixin on State<Playbar> {
+  List<Color> gradientColors = [Colors.white, Colors.white];
+  bool isLoading = true;
+
+  Future<void> updatePaletteColors(String imageUrl) async {
+    try {
+      final ImageProvider imageProvider = NetworkImage(imageUrl);
+      final generator = await PaletteGenerator.fromImageProvider(
+        imageProvider,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        Color dominantColor = generator.dominantColor?.color ?? Colors.white;
+        Color darkenedDominant = HSLColor.fromColor(dominantColor)
+            .withLightness((HSLColor.fromColor(dominantColor).lightness * 0.8)
+                .clamp(0.0, 0.8))
+            .toColor();
+
+        Color secondColor = generator.paletteColors.length > 1
+            ? generator.paletteColors[1].color
+            : generator.dominantColor?.color ?? Colors.white;
+        Color darkenedSecond = HSLColor.fromColor(secondColor)
+            .withLightness((HSLColor.fromColor(secondColor).lightness * 0.8)
+                .clamp(0.0, 0.8))
+            .toColor();
+
+        gradientColors = [darkenedDominant, darkenedSecond];
+        isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error generating palette: $e');
+      setState(() {
+        gradientColors = [Colors.white, Colors.white];
+        isLoading = false;
+      });
+    }
+  }
+}
 
 class Playbar extends StatefulWidget {
   const Playbar({super.key});
@@ -9,63 +81,23 @@ class Playbar extends StatefulWidget {
   State<Playbar> createState() => _PlaybarState();
 }
 
-class _PlaybarState extends State<Playbar> {
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  List<Color> gradientColors = [Colors.white, Colors.white];
-  final String albumImageUrl = 'https://i.redd.it/f78qbns6rrqb1.png';
-  final String audioUrl =
-      'https://files.freemusicarchive.org//storage-freemusicarchive-org//tracks//CAsMyXsiK0RkmsBG2K75J4wdewYDJElKJCe1tSQM.mp3';
-  bool isLoading = true;
-  bool isPlaying = false;
-  Duration? duration;
-  Duration position = Duration.zero;
+class _PlaybarState extends State<Playbar>
+    with AudioPlayerController, PaletteGeneratorMixin {
+  late final MusicData musicData;
 
   @override
   void initState() {
     super.initState();
-    _initAudioPlayer();
-    _updatePaletteColors();
-  }
-
-  Future<void> _initAudioPlayer() async {
-    try {
-      await _audioPlayer.setUrl(audioUrl);
-      if (!mounted) return;
-
-      // duration을 비동기로 기다린 후 설정
-      final audioDuration = _audioPlayer.duration;
-      if (!mounted) return;
-
-      setState(() {
-        duration = audioDuration;
-      });
-
-      // 재생 상태 리스너
-      _audioPlayer.playerStateStream.listen((state) {
-        if (!mounted) return;
-        setState(() {
-          isPlaying = state.playing;
-        });
-      });
-
-      // 재생 위치 리스너
-      _audioPlayer.positionStream.listen((pos) {
-        if (!mounted) return;
-        setState(() {
-          position = pos;
-        });
-      });
-
-      // duration 변경 리스너 추가
-      _audioPlayer.durationStream.listen((updatedDuration) {
-        if (!mounted) return;
-        setState(() {
-          duration = updatedDuration;
-        });
-      });
-    } catch (e) {
-      debugPrint('Error initializing audio player: $e');
-    }
+    musicData = const MusicData(
+      title: '곡 제목',
+      artist: '아티스트',
+      albumImageUrl:
+          'https://image.bugsm.co.kr/album/images/500/202444/20244482.jpg',
+      audioUrl:
+          'https://files.freemusicarchive.org//storage-freemusicarchive-org//tracks//CAsMyXsiK0RkmsBG2K75J4wdewYDJElKJCe1tSQM.mp3',
+    );
+    initAudioPlayer(musicData.audioUrl);
+    updatePaletteColors(musicData.albumImageUrl);
   }
 
   String _formatDuration(Duration? duration) {
@@ -76,187 +108,47 @@ class _PlaybarState extends State<Playbar> {
     return '$minutes:$seconds';
   }
 
-  Future<void> _updatePaletteColors() async {
-    final ImageProvider imageProvider = NetworkImage(albumImageUrl);
-    final PaletteGenerator generator = await PaletteGenerator.fromImageProvider(
-      imageProvider,
-      size: const Size(800, 800),
-    );
-
-    if (!mounted) return;
-
+  void _handleSliderChanged(double value) {
     setState(() {
-      Color dominantColor = generator.dominantColor?.color ?? Colors.white;
-      Color darkenedDominant = HSLColor.fromColor(dominantColor)
-          .withLightness((HSLColor.fromColor(dominantColor).lightness * 0.8)
-              .clamp(0.8, 1.0))
-          .toColor();
+      dragValue = value;
+    });
+  }
 
-      Color secondColor = generator.paletteColors.length > 1
-          ? generator.paletteColors[1].color
-          : generator.dominantColor?.color ?? Colors.white;
-      Color darkenedSecond = HSLColor.fromColor(secondColor)
-          .withLightness(
-              (HSLColor.fromColor(secondColor).lightness * 0.8).clamp(0.8, 1.0))
-          .toColor();
+  void _handleSliderChangeEnd(double value) {
+    audioPlayer.seek(Duration(seconds: value.toInt()));
+    setState(() {
+      isSliderDragging = false;
+      dragValue = null;
+    });
+  }
 
-      gradientColors = [darkenedDominant, darkenedSecond];
-      isLoading = false;
+  void _handleSliderChangeStart(double value) {
+    setState(() {
+      isSliderDragging = true;
+      dragValue = value;
     });
   }
 
   @override
-  void dispose() {
-    _audioPlayer.stop();
-    _audioPlayer.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final albumCoverSize = MediaQuery.of(context).size.width - 64;
-
     return GestureDetector(
       onTap: () {
         showModalBottomSheet(
           context: context,
           isScrollControlled: true,
           isDismissible: true,
-          builder: (BuildContext context) {
-            return Container(
-              height: MediaQuery.of(context).size.height,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: gradientColors,
-                ),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(28),
-                  topRight: Radius.circular(28),
-                ),
-              ),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: albumCoverSize,
-                        height: albumCoverSize,
-                        decoration: BoxDecoration(
-                          borderRadius:
-                              const BorderRadius.all(Radius.circular(4)),
-                          image: DecorationImage(
-                            image: NetworkImage(albumImageUrl),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      const Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '곡 제목',
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  '아티스트',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 32),
-                      // 프로그레스 바
-                      Slider(
-                        value: position.inSeconds.toDouble(),
-                        min: 0,
-                        max: duration?.inSeconds.toDouble() ?? 0,
-                        onChanged: (value) async {
-                          await _audioPlayer
-                              .seek(Duration(seconds: value.toInt()));
-                        },
-                        activeColor: Colors.white,
-                        inactiveColor: Colors.white.withOpacity(0.3),
-                      ),
-                      // 시간 표시
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _formatDuration(position),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            Text(
-                              _formatDuration(duration),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // 재생 컨트롤
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.skip_previous,
-                                color: Colors.white, size: 36),
-                            onPressed: () {
-                              // 이전 곡 재생 로직
-                            },
-                          ),
-                          const SizedBox(width: 16),
-                          IconButton(
-                            icon: Icon(
-                              isPlaying
-                                  ? Icons.pause_circle_filled
-                                  : Icons.play_circle_fill,
-                              color: Colors.white,
-                              size: 64,
-                            ),
-                            onPressed: () {
-                              if (isPlaying) {
-                                _audioPlayer.pause();
-                              } else {
-                                _audioPlayer.play();
-                              }
-                            },
-                          ),
-                          const SizedBox(width: 16),
-                          IconButton(
-                            icon: const Icon(Icons.skip_next,
-                                color: Colors.white, size: 36),
-                            onPressed: () {
-                              // 다음 곡 재생 로직
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
+          builder: (BuildContext context) => PlaybarBottomSheet(
+            gradientColors: gradientColors,
+            audioPlayer: audioPlayer,
+            musicData: musicData,
+            isSliderDragging: isSliderDragging,
+            dragValue: dragValue,
+            onSliderChanged: _handleSliderChanged,
+            onSliderChangeEnd: _handleSliderChangeEnd,
+            onSliderChangeStart: _handleSliderChangeStart,
+            onTogglePlayPause: togglePlayPause,
+            formatDuration: _formatDuration,
+          ),
         );
       },
       child: Container(
@@ -284,27 +176,27 @@ class _PlaybarState extends State<Playbar> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
                 image: DecorationImage(
-                  image: NetworkImage(albumImageUrl),
+                  image: NetworkImage(musicData.albumImageUrl),
                   fit: BoxFit.cover,
                 ),
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '곡 제목',
-                    style: TextStyle(
+                    musicData.title,
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
                   ),
                   Text(
-                    '아티스트',
-                    style: TextStyle(
+                    musicData.artist,
+                    style: const TextStyle(
                       fontSize: 12,
                       color: Colors.black54,
                     ),
@@ -312,17 +204,17 @@ class _PlaybarState extends State<Playbar> {
                 ],
               ),
             ),
-            IconButton(
-              icon: Icon(
-                isPlaying ? Icons.pause : Icons.play_arrow,
-                color: Colors.black87,
-              ),
-              onPressed: () {
-                if (isPlaying) {
-                  _audioPlayer.pause();
-                } else {
-                  _audioPlayer.play();
-                }
+            StreamBuilder<PlayerState>(
+              stream: audioPlayer.playerStateStream,
+              builder: (context, snapshot) {
+                final playing = snapshot.data?.playing ?? false;
+                return IconButton(
+                  icon: Icon(
+                    playing ? Icons.pause : Icons.play_arrow,
+                    color: Colors.black87,
+                  ),
+                  onPressed: togglePlayPause,
+                );
               },
             ),
           ],
