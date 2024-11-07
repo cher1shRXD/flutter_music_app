@@ -1,32 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_music_app/models/music_model.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
-class PlaybarBottomSheet extends StatelessWidget {
+class PlaybarBottomSheet extends StatefulWidget {
   final List<Color> gradientColors;
-  final AudioPlayer audioPlayer;
+  final YoutubePlayerController controller;
   final MusicData musicData;
-  final bool isSliderDragging;
-  final double? dragValue;
-  final ValueChanged<double> onSliderChanged;
   final ValueChanged<double> onSliderChangeEnd;
-  final ValueChanged<double> onSliderChangeStart;
   final Function() onTogglePlayPause;
+  final Function() onNextVideo;
+  final Function() onPreviousVideo;
   final Function(Duration) formatDuration;
 
   const PlaybarBottomSheet({
     super.key,
     required this.gradientColors,
-    required this.audioPlayer,
+    required this.controller,
     required this.musicData,
-    required this.isSliderDragging,
-    required this.dragValue,
-    required this.onSliderChanged,
     required this.onSliderChangeEnd,
-    required this.onSliderChangeStart,
     required this.onTogglePlayPause,
+    required this.onNextVideo,
+    required this.onPreviousVideo,
     required this.formatDuration,
   });
+
+  @override
+  State<PlaybarBottomSheet> createState() => _PlaybarBottomSheetState();
+}
+
+class _PlaybarBottomSheetState extends State<PlaybarBottomSheet> {
+  bool _isDragging = false;
+  double? _currentSliderValue;
 
   Widget _buildAlbumCover(double size) {
     return Container(
@@ -35,7 +40,7 @@ class PlaybarBottomSheet extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: const BorderRadius.all(Radius.circular(8)),
         image: DecorationImage(
-          image: NetworkImage(musicData.albumImageUrl),
+          image: NetworkImage(widget.musicData.albumImageUrl),
           fit: BoxFit.cover,
         ),
       ),
@@ -50,7 +55,9 @@ class PlaybarBottomSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                musicData.title,
+                widget.musicData.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -59,7 +66,9 @@ class PlaybarBottomSheet extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                musicData.artist,
+                widget.musicData.artist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 18,
                   color: Colors.white,
@@ -73,11 +82,15 @@ class PlaybarBottomSheet extends StatelessWidget {
   }
 
   Widget _buildProgressSlider() {
-    return StreamBuilder<Duration>(
-      stream: audioPlayer.positionStream,
-      builder: (context, snapshot) {
-        final duration = audioPlayer.duration ?? Duration.zero;
-        final position = snapshot.data ?? Duration.zero;
+    return ValueListenableBuilder<YoutubePlayerValue>(
+      valueListenable: widget.controller,
+      builder: (context, value, child) {
+        final position = value.position;
+        final duration = value.metaData.duration;
+
+        if (!_isDragging) {
+          _currentSliderValue = position.inSeconds.toDouble();
+        }
 
         return Column(
           children: [
@@ -87,36 +100,42 @@ class PlaybarBottomSheet extends StatelessWidget {
                 data: SliderTheme.of(context).copyWith(
                   trackHeight: 5,
                   thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 6,
-                    pressedElevation: 0,
+                    enabledThumbRadius: 8,
+                    pressedElevation: 8,
                   ),
                   overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 0,
+                    overlayRadius: 16,
                   ),
+                  overlayColor: Colors.white.withOpacity(0.3),
                   thumbColor: Colors.white,
-                  overlayColor: Colors.transparent,
+                  activeTrackColor: Colors.white,
+                  inactiveTrackColor: Colors.white.withOpacity(0.3),
                   trackShape: const RoundedRectSliderTrackShape(),
                 ),
                 child: Slider(
-                  value: isSliderDragging
-                      ? dragValue ?? position.inSeconds.toDouble()
-                      : position.inSeconds.toDouble(),
+                  value: (_currentSliderValue ?? 0)
+                      .clamp(0, duration.inSeconds.toDouble()),
                   min: 0,
                   max: duration.inSeconds.toDouble(),
                   onChangeStart: (value) {
-                    onSliderChangeStart(value);
-                    audioPlayer.pause();
+                    setState(() {
+                      _isDragging = true;
+                      _currentSliderValue = value;
+                    });
+                    HapticFeedback.lightImpact();
                   },
                   onChanged: (value) {
-                    onSliderChanged(value);
-                    audioPlayer.seek(Duration(seconds: value.toInt()));
+                    setState(() {
+                      _currentSliderValue = value;
+                    });
                   },
                   onChangeEnd: (value) {
-                    onSliderChangeEnd(value);
-                    audioPlayer.play();
+                    setState(() {
+                      _isDragging = false;
+                    });
+                    widget.onSliderChangeEnd(value);
+                    HapticFeedback.mediumImpact();
                   },
-                  activeColor: Colors.white,
-                  inactiveColor: Colors.white.withOpacity(0.3),
                 ),
               ),
             ),
@@ -126,16 +145,16 @@ class PlaybarBottomSheet extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    formatDuration(isSliderDragging
-                        ? Duration(seconds: dragValue?.toInt() ?? 0)
-                        : position),
+                    widget.formatDuration(
+                      Duration(seconds: _currentSliderValue?.toInt() ?? 0),
+                    ),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
                     ),
                   ),
                   Text(
-                    formatDuration(duration),
+                    widget.formatDuration(duration),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -151,38 +170,57 @@ class PlaybarBottomSheet extends StatelessWidget {
   }
 
   Widget _buildPlayControls() {
-    return StreamBuilder<PlayerState>(
-      stream: audioPlayer.playerStateStream,
-      builder: (context, snapshot) {
-        final playing = snapshot.data?.playing ?? false;
+    return ValueListenableBuilder<YoutubePlayerValue>(
+      valueListenable: widget.controller,
+      builder: (context, value, _) {
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             IconButton(
-              icon: const Icon(Icons.skip_previous,
-                  color: Colors.white, size: 36),
+              icon: const Icon(
+                Icons.loop,
+                color: Colors.white,
+                size: 20,
+              ),
               onPressed: () {},
               splashColor: Colors.transparent,
               highlightColor: Colors.transparent,
             ),
-            const SizedBox(width: 16),
+            IconButton(
+              icon: const Icon(Icons.skip_previous,
+                  color: Colors.white, size: 32),
+              onPressed: widget.onPreviousVideo,
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+            ),
             IconButton(
               icon: Icon(
-                playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                value.isPlaying
+                    ? Icons.pause_circle_filled
+                    : Icons.play_circle_fill,
                 color: Colors.white,
                 size: 64,
               ),
-              onPressed: onTogglePlayPause,
+              onPressed: widget.onTogglePlayPause,
               splashColor: Colors.transparent,
               highlightColor: Colors.transparent,
             ),
-            const SizedBox(width: 16),
             IconButton(
-              icon: const Icon(Icons.skip_next, color: Colors.white, size: 36),
+              icon: const Icon(Icons.skip_next, color: Colors.white, size: 32),
+              onPressed: widget.onNextVideo,
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+            ),
+            IconButton(
+              icon: const Icon(
+                Icons.shuffle,
+                color: Colors.white,
+                size: 20,
+              ),
               onPressed: () {},
               splashColor: Colors.transparent,
               highlightColor: Colors.transparent,
-            ),
+            )
           ],
         );
       },
@@ -191,7 +229,7 @@ class PlaybarBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final albumCoverSize = MediaQuery.of(context).size.width - 64;
+    final albumCoverSize = MediaQuery.of(context).size.width - 48;
 
     return Container(
       height: MediaQuery.of(context).size.height,
@@ -199,7 +237,7 @@ class PlaybarBottomSheet extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: gradientColors,
+          colors: widget.gradientColors,
         ),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(28),
@@ -208,7 +246,7 @@ class PlaybarBottomSheet extends StatelessWidget {
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
